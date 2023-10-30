@@ -1,0 +1,317 @@
+esphome:
+  name: automower
+  friendly_name: automower
+  includes:
+    - automower/automower.h
+
+esp8266:
+  board: d1_mini
+
+# Enable logging
+logger:
+  hardware_uart: UART1
+  baud_rate: 0
+  level: VERBOSE
+  esp8266_store_log_strings_in_flash: False
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "XXXX"
+
+ota:
+  password: "YYY"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+    
+
+uart:
+  id: uart_bus
+  rx_pin: D2
+  tx_pin: D1
+  baud_rate: 9600
+  # debug:
+  #   direction: BOTH
+  #   dummy_receiver: true
+  #   after:
+  #     timeout: 100ms
+
+
+custom_component:
+- lambda: |-
+    // update_interval = 15 seconds
+    auto my_custom = new Automower(id(uart_bus),5000);
+    return {my_custom};
+  components:
+  - id: automower
+
+text_sensor:
+  # - platform: template
+  #   name: "Template Text Sensor"
+  #   lambda: |-
+  #     return {"Hello World"};
+  #   update_interval: 60s
+  - platform: custom
+    lambda: |-
+      Automower *mower = (Automower *) id(automower);
+      //App.register_component(mower);
+      return {mower->lastCodeReceivedTextSensor,mower->modeTextSensor,mower->statusTextSensor}; 
+      //,mower->batteryLevelSensor
+
+    text_sensors:
+      - id: "last_read_code"
+        name: "Last received code"
+      - id: "current_mode"
+        name: "Mode actuel"
+      - id: "status"
+        name: "Etat"
+
+sensor:
+- platform: custom
+  lambda: |-
+      Automower *mower = (Automower *) id(automower);
+      return {mower->batteryLevelSensor,mower->chargingTimeSensor,mower->batteryUsedSensor,mower->batteryVoltageSensor,mower->firmwareVersionSensor}; 
+
+  sensors:
+    - id: batteryLevelSensor
+      name: "Battery level"
+      unit_of_measurement: mAh
+    - id: chargingTimeSensor
+      name: "Charging time"
+      unit_of_measurement: min
+    - id: batteryUsedSensor
+      name: "Battery used"
+      unit_of_measurement: mAh
+    - id: batteryVoltageSensor
+      name: "Battery voltage"
+      unit_of_measurement: V
+    - id: firmwareVersionSensor
+      name: "Firmware version"
+
+
+select:
+  - platform: template
+    name: "Mode select"
+    update_interval: 10s
+    options:
+      - "MAN"
+      - "AUTO"
+      - "HOME"
+      - "DEMO"
+    lambda: |-
+      Automower *mower = (Automower *) id(automower);
+      return {mower->modeTextSensor->state};
+    set_action:
+      then:
+      - lambda: |-
+          Automower *mower = (Automower *) id(automower);
+          mower->setMode(x);
+
+
+
+# select:
+# - platform: custom
+#   lambda: |-
+#     Automower *mower = (Automower *) id(automower);
+#     return {mower->modeSelect};
+#   id: mode_select
+#   name: "Mode"
+  
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    timezone: "Europe/Paris"
+        
+# switch:
+#   - platform: uart
+#     name: "W go home key"
+#     data: [0x0F, 0x80, 0x5F, 0x00, 0x0D]
+#   - platform: uart
+#     name: "W yes key"
+#     data: [0x0F, 0x80, 0x5F, 0x00, 0x12]
+#   - platform: uart
+#     name: "W Cancel key"
+#     data: [0x0F, 0x80, 0x5F, 0x00, 0x0F]
+#   - platform: uart
+#     name: "W auto key"
+#     data: [0x0F, 0x80, 0x5F, 0x00, 0x0E]
+
+#   - platform: uart
+#     name: "R return fast"
+#     data: [0x0F, 0x02, 0x7D, 0x00, 0x00]
+
+#   - platform: uart
+#     name: "W return fast 0 "
+#     data: [0x0F, 0x82, 0x7D, 0x00, 0x00]
+
+#   - platform: uart
+#     name: "W return fast 1"
+#     data: [0x0F, 0x82, 0x7D, 0x00, 0x01]
+
+#   - platform: uart
+#     name: "R Software Stop"
+#     data: [0x0F, 0x01, 0x2F, 0x00, 0x00]
+#     # 2=Stop,0=éteint
+
+#   - platform: uart
+#     name: "W Software Stop 2=STOP"
+#     data: [0x0F, 0x81, 0x2F, 0x00, 0x02]
+    
+#   - platform: uart
+#     name: "W Software Stop 0=pasSTOP"
+#     data: [0x0F, 0x81, 0x2F, 0x00, 0x00]
+    
+
+#   - platform: uart
+#     name: "R Software Stop status"
+#     data: [0x0F, 0x43, 0x78, 0x00, 0x00]
+#     # 1=allumé,0=éteint
+
+#   - platform: uart
+#     name: "R Statuscode"
+#     data: [0x0F, 0x01, 0xF1, 0x00, 0x00]    
+
+#   - platform: uart
+#     name: "R heure"
+#     data: [0x0F, 0x36, 0xB5, 0x00, 0x00]
+
+
+#   - platform: uart
+#     name: "R minuterie status"
+#     data: [0x0F, 0x4A, 0x4E, 0x00, 0x00]
+
+#   - platform: uart
+#     name: "W minuterie => allumer "
+#     data: [0x0F, 0xCA, 0x4E, 0x00, 0x01]
+
+#   - platform: uart
+#     name: "W minuterie => éteindre"
+#     data: [0x0F, 0xCA, 0x4E, 0x00, 0x00]    
+
+
+
+#   - platform: uart
+#     name: "R Timer 1"
+#     data: [0x0F, 0x4A, 0x38, 0x00, 0x00]
+
+
+#   - platform: uart
+#     name: "R mode"
+#     data: [0x0F, 0x01, 0x2C, 0x00, 0x00]
+
+#   - platform: uart
+#     name: "W mode => 0 MAN "
+#     data: [0x0F, 0x81, 0x2C, 0x00, 0x00]
+#   - platform: uart
+#     name: "W mode => 1 AUTO "
+#     data: [0x0F, 0x81, 0x2C, 0x00, 0x01]
+#   - platform: uart
+#     name: "W mode => 3 HOME "
+#     data: [0x0F, 0x81, 0x2C, 0x00, 0x03]
+#   - platform: uart
+#     name: "W mode => 4 DEMO "
+#     data: [0x0F, 0x81, 0x2C, 0x00, 0x04]
+
+
+
+    
+      # "W_MODE_MAN"  {set hexin "0F812C0000"}
+      # "W_MODE_AUTO" {set hexin "0F812C0001"}
+      # "W_MODE_HOME" {set hexin "0F812C0003"}
+      # "W_MODE_DEMO" {set hexin "0F812C0004"}
+
+
+      # "W_KEY_0" {set hexin "0F805F0000"}
+      # "W_KEY_1" {set hexin "0F805F0001"}
+      # "W_KEY_2" {set hexin "0F805F0002"}
+      # "W_KEY_3" {set hexin "0F805F0003"}
+      # "W_KEY_4" {set hexin "0F805F0004"}
+      # "W_KEY_5" {set hexin "0F805F0005"}
+      # "W_KEY_6" {set hexin "0F805F0006"}
+      # "W_KEY_7" {set hexin "0F805F0007"}
+      # "W_KEY_8" {set hexin "0F805F0008"}
+      # "W_KEY_9" {set hexin "0F805F0009"}
+      # "W_PRG_A" {set hexin "0F805F000A"}
+      # "W_PRG_B" {set hexin "0F805F000B"}
+      # "W_PRG_C" {set hexin "0F805F000C"}
+      # "W_KEY_HOME" {set hexin "0F805F000D"}
+      # "W_KEY_MANAUTO" {set hexin "0F805F000E"}
+      # "W_KEY_C" {set hexin "0F805F000F"}
+      # "W_KEY_UP" {set hexin "0F805F0010"}
+      # "W_KEY_DOWN" {set hexin "0F805F0011"}
+      # "W_KEY_YES" {set hexin "0F805F0012"}
+
+#   "R_STATUS" {set hexin "0F01F10000"}
+# "R_SEKUNDE" {set hexin "0F36B10000"}
+# "R_MINUTE" {set hexin "0F36B30000"}
+# "R_STUNDE" {set hexin "0F36B50000"}
+# "R_TAG" {set hexin "0F36B70000"}
+# "R_MONAT" {set hexin "0F36B90000"}
+# "R_JAHR" {set hexin "0F36BD0000"}
+# "R_TIMERSTATUS" {set hexin "0F4A4E0000"}
+# "R_WOCHEN-TIMER1-START-STD" {set hexin "0F4A380000"}
+# "R_WOCHEN-TIMER1-START-MIN" {set hexin "0F4A390000"}
+# "R_WOCHEN-TIMER1-STOP-STD" {set hexin "0F4A3A0000"}
+# "R_WOCHEN-TIMER1-STOP-MIN" {set hexin "0F4A3B0000"}
+# "R_WOCHENEND-TIMER1-START-STD" {set hexin "0F4A3C0000"}
+# "R_WOCHENEND-TIMER1-START-MIN" {set hexin "0F4A3D0000"}
+# "R_WOCHENEND-TIMER1-STOP-STD" {set hexin "0F4A3E0000"}
+# "R_WOCHENEND-TIMER1-STOP-MIN" {set hexin "0F4A3F0000"}
+# "R_WOCHEN-TIMER2-START-STD" {set hexin "0F4A400000"}
+# "R_WOCHEN-TIMER2-START-MIN" {set hexin "0F4A410000"}
+# "R_WOCHEN-TIMER2-STOP-STD" {set hexin "0F4A420000"}
+# "R_WOCHEN-TIMER2-STOP-MIN" {set hexin "0F4A430000"}
+# "R_WOCHENEND-TIMER2-START-STD" {set hexin "0F4A440000"}
+# "R_WOCHENEND-TIMER2-START-MIN" {set hexin "0F4A450000"}
+# "R_WOCHENEND-TIMER2-STOP-STD" {set hexin "0F4A460000"}
+# "R_WOCHENEND-TIMER2-STOP-MIN" {set hexin "0F4A470000"}
+# "R_TIMER-TAGE" {set hexin "0F4A500000"}
+# "R_TIMER-STATUS" {set hexin "0F4A4E0000"}
+# "R_WOCHENTIMER-TAGE" {set hexin "0F4A500000"}
+# "R_MAEHZEIT" {set hexin "0F00380000"}
+# "R_VIERECKMODUS-STATUS" {set hexin "0F01380000"}
+# "R_VIERECKMODUS-PROZENT" {set hexin "0F01340000"}
+# "R_VIERECKMODUS-STATUS" {set hexin "0F01370000"}
+# "R_AKKU-LADEZEIT_MIN" {set hexin "0F01EC0000"}
+# "R_AKKU-KAPAZITAET_MA" {set hexin "0F01EB0000"}
+# "R_AKKU-KAPAZITAET_MAH" {set hexin "0F01EF0000"}
+# "R_AKKU-KAPAZITAET-SUCHSTART_MAH" {set hexin "0F01EF0000"}
+# "R_AKKU-KAPAZITAET-GENUTZT_MAH" {set hexin "0F2EE00000"}
+# "R_AKKU-SPANNUNG_MV" {set hexin "0F2EF40000"}
+# "R_AKKU-TEMPERATUR-AKTUELL" {set hexin "0F02330000"}
+# "R_AKKU-TEMPERATUR-LADEN" {set hexin "0F02350000"}
+# "R_AKKU-LETZTER-LADEVORGANG_MIN" {set hexin "0F02350000"}
+# "R_AKKU-NAECHSTE_TEMPERATURMESSUNG_SEK" {set hexin "0F02360000"}
+# "R_GESCHWINDIGKEIT-MESSERMOTOR" {set hexin "0F2EEA0000"}
+# "R_GESCHWINDIGKEIT-RECHTS" {set hexin "0F24BF0000"}
+# "R_GESCHWINDIGKEIT-LINKS" {set hexin "0F24C00000"}
+# "R_FIRMWARE-VERSION" {set hexin "0F33900000"}
+# "R_SPRACHDATEI-VERSION" {set hexin "0F3AC00000"}
+# "W_TIMERAKTIV" {set hexin "0FCA4E0000"}
+# "W_TIMERINAKTIV" {set hexin "0FCA4E0001"}
+# "W_MODE_HOME" {set hexin "0F812C0003"}
+# "W_MODE_MAN" {set hexin "0F812C0000"}
+# "W_MODE_AUTO" {set hexin "0F812C0001"}
+# "W_MODE_DEMO" {set hexin "0F812C0004"}
+# "W_KEY_0" {set hexin "0F805F0000"}
+# "W_KEY_1" {set hexin "0F805F0001"}
+# "W_KEY_2" {set hexin "0F805F0002"}
+# "W_KEY_3" {set hexin "0F805F0003"}
+# "W_KEY_4" {set hexin "0F805F0004"}
+# "W_KEY_5" {set hexin "0F805F0005"}
+# "W_KEY_6" {set hexin "0F805F0006"}
+# "W_KEY_7" {set hexin "0F805F0007"}
+# "W_KEY_8" {set hexin "0F805F0008"}
+# "W_KEY_9" {set hexin "0F805F0009"}
+# "W_PRG_A" {set hexin "0F805F000A"}
+# "W_PRG_B" {set hexin "0F805F000B"}
+# "W_PRG_C" {set hexin "0F805F000C"}
+# "W_KEY_HOME" {set hexin "0F805F000D"}
+# "W_KEY_MANAUTO" {set hexin "0F805F000E"}
+# "W_KEY_C" {set hexin "0F805F000F"}
+# "W_KEY_UP" {set hexin "0F805F0010"}
+# "W_KEY_DOWN" {set hexin "0F805F0011"}
+# "W_KEY_YES" {set hexin "0F805F0012"}
