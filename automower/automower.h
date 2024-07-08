@@ -14,6 +14,12 @@ private:
     const uint8_t AUTO_DATA[5] = {0x0F, 0x81, 0x2C, 0x00, 0x01};
     const uint8_t HOME_DATA[5] = {0x0F, 0x81, 0x2C, 0x00, 0x03};
     const uint8_t DEMO_DATA[5] = {0x0F, 0x81, 0x2C, 0x00, 0x04};
+
+
+    const uint8_t STOP_ON_DATA[5] = {0x0F, 0x81, 0x2F, 0x00, 0x02};
+    const uint8_t STOP_OFF_DATA[5] = {0x0F, 0x81, 0x2F, 0x00, 0x00};
+    const uint8_t READ_STOP_CMD[5] = {0x0F, 0x01, 0x2F, 0x00, 0x00};
+
     const uint8_t getModeCmd[5] = {0x0F, 0x01, 0x2C, 0x00, 0x00};
     const uint8_t getStatusCode[5] = {0x0F, 0x01, 0xF1, 0x00, 0x00};
     const uint8_t getChargingTime[5] = {0x0F, 0x01, 0xEC, 0x00, 0x00};
@@ -42,15 +48,17 @@ private:
         getBatteryUsed,
         getBatteryVoltage,
         getFirmwareVersion,
+        READ_STOP_CMD,
         };
 
 
     bool _writable = true;
+    
 
 
 public:
 
-
+    bool stopStatus = false;
     Sensor *batteryLevelSensor = new Sensor();
     Sensor *batteryUsedSensor = new Sensor();
     Sensor *chargingTimeSensor = new Sensor();
@@ -93,6 +101,56 @@ public:
             ESP_LOGE("Automower","Mode non géré : %s", value.c_str());
         }
     }
+
+    void setStop(bool stop){
+        if(stop){
+            write_array(STOP_ON_DATA, sizeof(STOP_ON_DATA));
+        }else{
+            write_array(STOP_OFF_DATA, sizeof(STOP_OFF_DATA));
+        }
+    }
+
+    void setRightMotor(int value){
+        uint8_t data[5] = {0x0F, 0x92, 0x03,(uint8_t) ((value >> 8) & 0xFF) , (uint8_t) (value & 0xFF)};
+        write_array(data,5);
+    }
+    void setLeftMotor(int value){
+        uint8_t data[5] = {0x0F, 0x92, 0x23,(uint8_t) ((value >> 8) & 0xFF) , (uint8_t) (value & 0xFF)};
+        write_array(data,5);
+    }
+
+    // 0D ??
+    void setMode0D(){
+        uint8_t data[5] = {0x0F, 0x81, 0x0D, 0x3A, 0x9D};
+        write_array(data,5);
+    }
+    // 9A ??
+    void setMode9A(){
+        uint8_t data[5] = { 0x0F, 0x81, 0x9A, 0x00, 0x90};
+        write_array(data,5);
+    }
+    // 99 ??
+    void setMode99(){
+        uint8_t data[5] = {0x0F, 0x81, 0x99, 0x00, 0x90};
+        write_array(data,5);
+    }
+    void backKey(){
+        uint8_t data[5] = { 0x0F, 0x80, 0x5F, 0x00, 0x0F };
+        write_array(data,5);
+    }
+    void yesKey(){
+        uint8_t data[5] = { 0x0F, 0x80, 0x5F, 0x00, 0x12 };
+        write_array(data,5);
+    }
+    // 0-9 + A B C - D=HOME - E=MAN/AUTO - - F=Cancel - 10=Up - 11=down - 12=Yes
+    void numKey(uint8_t num){
+        uint8_t data[5] = { 0x0F, 0x80, 0x5F, 0x00, num };
+        write_array(data,5);
+    }
+
+
+
+
 
     void setup() override {
         
@@ -166,12 +224,30 @@ public:
                 case 0x3390:
                     firmwareVersionSensor->publish_state((float)receivedValue);
                     break;
+                case 0x012F:
+                    setStopStatusFromCode(receivedValue);
+                    break;
 
             }
 
         }
     }
+    void setStopStatusFromCode(uint16_t receivedValue){
+        switch(receivedValue){
+            case 0x0000: 
+                stopStatus = false;
+                break;
+            case 0x0002: 
+                stopStatus = true;
+                break;
+            default: 
+                char s[16];
+                sprintf(s,"%04x",receivedValue);
+                ESP_LOGE("Automower","Stop status non géré : %s", s);
+                break;
+        }
 
+    }
 
     void publishMode(uint16_t receivedValue){
         std::string mode;
@@ -201,99 +277,109 @@ public:
         switch(receivedValue){
 
             case 0x0006: 
-                statusTextSensor->publish_state("Moteur gauche bloqué");
+                statusTextSensor->publish_state("LEB Left engine blocked");
                 break;
 
             case 0x000C: 
-                statusTextSensor->publish_state("Pas de signal de boucle");
+                statusTextSensor->publish_state("NCS No cable signal");
                 break;
             case 0x0010: 
-                statusTextSensor->publish_state("Dehors");
+                statusTextSensor->publish_state("OUT");
                 break;
             case 0x0012: 
-                statusTextSensor->publish_state("Tension de batterie faible");
+                statusTextSensor->publish_state("LBV Low battery voltage");
                 break;
             case 0x001A: 
-                statusTextSensor->publish_state("Borne de recharge bloquée");
+                statusTextSensor->publish_state("CSB Charging station blocked");
                 break;
             case 0x0022: 
-                statusTextSensor->publish_state("Tondeuse levée");
+                statusTextSensor->publish_state("MRA  Mower raised");
                 break;
             case 0x0034:
-                statusTextSensor->publish_state("Pas de contact avec la station de charge");
+                statusTextSensor->publish_state("NCC No contact with the charging station");
                 break;
             case 0x0036:
-                statusTextSensor->publish_state("PIN expiré");
+                statusTextSensor->publish_state("PIN expired");
                 break;
             case 0x03E8:
-                statusTextSensor->publish_state("Sortie station");
+                statusTextSensor->publish_state("SE1  Station exit");
                 break;
             case 0x03EA:
-                statusTextSensor->publish_state("Tonte en cours");
+                statusTextSensor->publish_state("MIP Mowing in progress");
                 break;
             case 0x03EE:
-                statusTextSensor->publish_state("Démarrage de la tondeuse");
+                statusTextSensor->publish_state("STM Starting the mower");
                 break;
             case 0x03F0:
-                statusTextSensor->publish_state("Tondeuse démarrée");
+                statusTextSensor->publish_state("MST  Mower started");
                 break;
             case 0x03F4:
-                statusTextSensor->publish_state("Signal de démarrage de la tondeuse");
+                statusTextSensor->publish_state("MSS Mower start signal");
                 break;
             case 0x03F6:
-                statusTextSensor->publish_state("En charge");
+                statusTextSensor->publish_state("ICH  In charge");
                 break;
             case 0x03F8:
-                statusTextSensor->publish_state("Waiting in station");
+                statusTextSensor->publish_state("WIS Waiting in station");
                 break;
             case 0x0400:
-                statusTextSensor->publish_state("Sortie station 2");
+                statusTextSensor->publish_state("SE2 Station exit 2");
                 break;
             case 0x040C:
-                statusTextSensor->publish_state("Mode carrés");
+                statusTextSensor->publish_state("SMO  Square Mode");
                 break;
             case 0x040E:
-                statusTextSensor->publish_state("Coincé");
+                statusTextSensor->publish_state("STU Stuck");
                 break;
             case 0x0410:
-                statusTextSensor->publish_state("Collision");
+                statusTextSensor->publish_state("COL Collision");
                 break;
             case 0x0412:
-                statusTextSensor->publish_state("Recherche");
+                statusTextSensor->publish_state("RES Research");
                 break;
             case 0x0414:
-                statusTextSensor->publish_state("Arrêt");
+                statusTextSensor->publish_state("STP Stop");
                 break;
             case 0x0418:
-                statusTextSensor->publish_state("Amarrage");
+                statusTextSensor->publish_state("DOC Docking");
                 break;
             case 0x041A:
-                statusTextSensor->publish_state("Sortie du mode de verrouillage de sécurité");
+                statusTextSensor->publish_state("SE3 Station exit 3");
                 break;
             case 0x041C:
-                statusTextSensor->publish_state("Erreur");
+                statusTextSensor->publish_state("ERR Error");
                 break;
             case 0x0420:
-                statusTextSensor->publish_state("Waiting HOME");
+                statusTextSensor->publish_state("WHO Waiting HOME");
                 break;
             case 0x0422:
-                statusTextSensor->publish_state("Suivre la limite");
+                statusTextSensor->publish_state("FTL Follow the limit");
                 break;
             case 0x0424:
-                statusTextSensor->publish_state("Signal trouvé");
+                statusTextSensor->publish_state("SFD Signal found");
                 break;
             case 0x0426:
-                statusTextSensor->publish_state("Coincé2");
+                statusTextSensor->publish_state("ST2 Stuck2");
                 break;
             case 0x0428:
-                statusTextSensor->publish_state("Recherche");
+                statusTextSensor->publish_state("RE2 Research2");
                 break;
             case 0x042E:
-                statusTextSensor->publish_state("Suivre la boucle de recherche");
+                statusTextSensor->publish_state("FGC Following guide cable");
                 break;
             case 0x0430:
-                statusTextSensor->publish_state("Suivre la boucle");
+                statusTextSensor->publish_state("FC2 Following cable 430");
                 break;
+            case 0x001c:
+                statusTextSensor->publish_state("MCN Manual charge needed");
+                break;
+            case 0x001e:
+                statusTextSensor->publish_state("CDB Cutting disc blocked 1e");
+                break;
+            case 0x0020:
+                statusTextSensor->publish_state("CD2 Cutting disc blocked 20");
+                break;
+
 
 
             default: 
